@@ -17,7 +17,7 @@ export MSYS2_ARG_CONV_EXCL := *
 #   make check            tools installed?
 #   make login            aws sso login
 #   make whoami           must be the git-lfs-developer role
-#   make config remote    wire up lfs-dal; local bare repo as origin
+#   make config remote    wire up lfs-dal; point origin at GitHub
 #   make assets commit push verify
 #   make roundtrip        fresh clone gets the files back from S3
 #
@@ -45,9 +45,9 @@ BUCKET      ?= $(if $(ACCOUNT_ID),utopia-online-shared-services-git-lfs-$(ACCOUN
 NEED_BUCKET  = bucket="$(BUCKET)"; test -n "$$bucket" || { echo "No bucket: run 'make login' first, or pass BUCKET=<name>."; exit 1; }
 
 BRANCH      ?= main
-# A local bare repo stands in for GitHub: git history goes there, LFS objects go
-# to S3. Relative to this directory.
-REMOTE_DIR  ?= ../test-lfs-remote.git
+# Git history goes to GitHub; only the LFS objects go to S3. The repo is public,
+# so keep anything sensitive out of it (the bucket name stays in .git/config).
+REMOTE_URL  ?= git@github.com:utopia-investments/test-lfs.git
 MSG         ?= Add LFS test assets
 
 SMALL_MB    ?= 1
@@ -75,7 +75,7 @@ help:
 	@echo ""
 	@echo "Set up:"
 	@echo "  config       Configure this clone for lfs-dal (bucket looked up from your login)"
-	@echo "  remote       Create $(REMOTE_DIR) and add it as origin"
+	@echo "  remote       Point origin at $(REMOTE_URL)"
 	@echo "  assets       Create test files: $(SMALL_MB) MB, $(MEDIUM_MB) MB (multipart) and a .umap"
 	@echo "  big          Also create a $(BIG_MB) MB file (BIG_MB=...); slow and a real upload"
 	@echo ""
@@ -143,7 +143,7 @@ config:
 	echo "Configured $(DIR): bucket=$$bucket root=$$(git -C $(DIR) config lfs-dal.root) region=$(REGION)"
 
 remote:
-	@git remote get-url origin >/dev/null 2>&1 || { git init --bare "$(REMOTE_DIR)" && git remote add origin "$(REMOTE_DIR)"; }
+	@if git remote get-url origin >/dev/null 2>&1; then git remote set-url origin "$(REMOTE_URL)"; else git remote add origin "$(REMOTE_URL)"; fi
 	@git remote -v
 
 assets:
@@ -196,7 +196,7 @@ verify:
 
 # A fresh clone from origin must get the real files back from S3, not pointers.
 roundtrip: clean-roundtrip
-	GIT_LFS_SKIP_SMUDGE=1 git clone --quiet "$(REMOTE_DIR)" .roundtrip
+	GIT_LFS_SKIP_SMUDGE=1 git clone --quiet "$(REMOTE_URL)" .roundtrip
 	@$(MAKE) --no-print-directory config DIR=.roundtrip
 	cd .roundtrip && $(A2W) git lfs pull
 	@$(PY) -c "import filecmp,glob,sys; bad=[f for f in glob.glob('assets/*') if not filecmp.cmp(f,'.roundtrip/'+f,shallow=False)]; print('MISMATCH:',bad) if bad else print('roundtrip ok: every file matches the original'); sys.exit(1 if bad else 0)"
