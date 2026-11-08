@@ -3,6 +3,13 @@
 
 .DEFAULT_GOAL := help
 
+# Git Bash / MSYS rewrites an argument that looks like a POSIX path, so
+# `git config lfs-dal.root /utopia-online/lfs-test` is stored as
+# `D:/apps/scoop/apps/git/<version>/utopia-online/lfs-test` and every upload goes
+# to a key the IAM policy denies. Turn that off for everything make runs.
+export MSYS_NO_PATHCONV := 1
+export MSYS2_ARG_CONV_EXCL := *
+
 # ---------------------------------------------------------------------------
 # Scratch repo for exercising the Utopia LFS setup (lfs-dal -> S3, via SSO).
 #
@@ -118,19 +125,22 @@ whoami:
 # DIR lets `roundtrip` configure its fresh clone the same way: make config DIR=.roundtrip
 DIR ?= .
 
-# Idempotent. Bucket settings go in .git/config (git config without -f), never in
-# a committed file, because the bucket name embeds the account ID.
+# Idempotent. lfs-dal fails with 'The configuration file at ".lfsdalconfig" could
+# not be read' if that file is missing, so it always exists and is committed. It
+# holds only the non-secret settings. The bucket name embeds the account ID, so
+# it (and the root) go in .git/config, which is never committed.
 config:
 	@$(NEED_BUCKET); \
 	git -C $(DIR) lfs install --local && \
 	git -C $(DIR) config lfs.standalonetransferagent lfs-dal && \
 	git -C $(DIR) config lfs.customtransfer.lfs-dal.path lfs-dal && \
 	git -C $(DIR) config -f .lfsconfig lfs.url lfs-dal && \
-	git -C $(DIR) config lfs-dal.scheme s3 && \
+	git -C $(DIR) config -f .lfsdalconfig lfs-dal.scheme s3 && \
+	git -C $(DIR) config -f .lfsdalconfig lfs-dal.region $(REGION) && \
 	git -C $(DIR) config lfs-dal.bucket "$$bucket" && \
-	git -C $(DIR) config lfs-dal.region $(REGION) && \
 	git -C $(DIR) config lfs-dal.root $(ROOT) && \
-	echo "Configured $(DIR): bucket=$$bucket root=$(ROOT) region=$(REGION)"
+	{ git -C $(DIR) config --unset lfs-dal.scheme; git -C $(DIR) config --unset lfs-dal.region; true; } 2>/dev/null; \
+	echo "Configured $(DIR): bucket=$$bucket root=$$(git -C $(DIR) config lfs-dal.root) region=$(REGION)"
 
 remote:
 	@git remote get-url origin >/dev/null 2>&1 || { git init --bare "$(REMOTE_DIR)" && git remote add origin "$(REMOTE_DIR)"; }
@@ -161,7 +171,7 @@ status:
 	@git lfs ls-files
 
 commit: track
-	git add .gitattributes .lfsconfig .gitignore Makefile assets
+	git add .gitattributes .lfsconfig .lfsdalconfig .gitignore Makefile assets
 	@git diff --cached --quiet && echo "Nothing to commit." || git commit -m "$(MSG)"
 
 push: remote
