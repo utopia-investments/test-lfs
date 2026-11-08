@@ -188,7 +188,7 @@ verify:
 	@$(NEED_BUCKET); \
 	echo "== objects under s3://$$bucket/$(PREFIX)/"; \
 	aws --profile $(AWS_PROFILE) s3 ls "s3://$$bucket/$(PREFIX)/" --recursive --human-readable || exit 1; \
-	key=$$(aws --profile $(AWS_PROFILE) s3api list-objects-v2 --bucket "$$bucket" --prefix "$(PREFIX)/" --max-items 1 --query 'Contents[0].Key' --output text); \
+	key=$$(aws --profile $(AWS_PROFILE) s3api list-objects-v2 --bucket "$$bucket" --prefix "$(PREFIX)/" --max-keys 1 --query 'Contents[0].Key' --output text | tr -d '\r'); \
 	[ -n "$$key" ] && [ "$$key" != "None" ] || { echo "No objects yet. Run: make push"; exit 1; }; \
 	echo "== encryption of $$key (expect SSEKMSKeyId)"; \
 	aws --profile $(AWS_PROFILE) s3api head-object --bucket "$$bucket" --key "$$key" \
