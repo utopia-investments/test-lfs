@@ -1,0 +1,4 @@
+# `make roundtrip` clones into here to prove the files come back from S3.
+.roundtrip/
+# `make debug` writes the lfs-dal log here.
+log-lfs-dal.txt
