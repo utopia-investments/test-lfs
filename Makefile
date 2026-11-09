@@ -4,8 +4,8 @@
 .DEFAULT_GOAL := help
 
 # Git Bash / MSYS rewrites an argument that looks like a POSIX path, so
-# `git config lfs-dal.root /utopia-online/lfs-test` is stored as
-# `D:/apps/scoop/apps/git/<version>/utopia-online/lfs-test` and every upload goes
+# `git config lfs-dal.root /test-lfs/lfs` is stored as
+# `D:/apps/scoop/apps/git/<version>/test-lfs/lfs` and every upload goes
 # to a key the IAM policy denies. Turn that off for everything make runs.
 export MSYS_NO_PATHCONV := 1
 export MSYS2_ARG_CONV_EXCL := *
@@ -30,12 +30,11 @@ SSO_SESSION ?= utopia-online
 AWS_PROFILE ?= shared-services-lfs
 REGION      ?= ap-southeast-2
 
-# Key prefix inside the bucket. The developer role can only write under the
-# repository keys configured in Terraform (utopia-online, rogue-agents,
-# utopia-modules), so a made-up key like /test-lfs/lfs is denied. A scratch
-# folder under an existing key works today and is easy to delete (clean-s3).
-# Add a `test-lfs` key to lfs_repositories if you want it to have its own prefix.
-ROOT        ?= /utopia-online/lfs-test
+# Where objects go in the bucket: <repo key>/lfs, like every other repository.
+# `test-lfs` is a key in Terraform's lfs_repositories (utopia-online-platform,
+# envs/shared-services/config.auto.tfvars), and the developer role can only write
+# under keys listed there.
+ROOT        ?= /test-lfs/lfs
 PREFIX       = $(patsubst /%,%,$(ROOT))
 
 # The bucket name embeds the AWS account ID, so it is looked up from your login
@@ -223,9 +222,9 @@ clean-roundtrip:
 	rm -rf .roundtrip
 
 # Deletes real objects in the shared bucket, so it is guarded twice: you must say
-# CONFIRM=yes, and the prefix must contain "lfs-test".
+# CONFIRM=yes, and the prefix must contain "test-lfs" (or the old "lfs-test").
 clean-s3:
 	@$(NEED_BUCKET); \
-	case "$(PREFIX)" in *lfs-test*) ;; *) echo "Refusing: prefix '$(PREFIX)' does not look like a test prefix."; exit 1 ;; esac; \
+	case "$(PREFIX)" in *test-lfs*|*lfs-test*) ;; *) echo "Refusing: prefix '$(PREFIX)' does not look like a test prefix."; exit 1 ;; esac; \
 	[ "$(CONFIRM)" = "yes" ] || { echo "This deletes s3://$$bucket/$(PREFIX)/. Re-run with CONFIRM=yes."; exit 1; }; \
 	aws --profile $(AWS_PROFILE) s3 rm "s3://$$bucket/$(PREFIX)/" --recursive
